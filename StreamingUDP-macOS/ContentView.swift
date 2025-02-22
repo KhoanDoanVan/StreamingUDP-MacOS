@@ -8,14 +8,22 @@
 import SwiftUI
 
 struct ContentView: View {
+    
+    @StateObject private var streamer = ScreenStreamer()
+    
     var body: some View {
         VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+            Text("Streaming Screen to iOS...")
+                .font(.title)
+                .padding()
+            Button("Start Streaming") {
+                Task {
+                    await streamer.startStreaming()
+                }
+            }
+            .padding()
         }
-        .padding()
+        .frame(width: 300, height: 200)
     }
 }
 
