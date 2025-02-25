@@ -22,12 +22,12 @@ class ScreenStreamer: NSObject, ObservableObject, SCStreamDelegate {
     
     func setupConnection() {
         let params = NWParameters.udp
-        self.connection = NWConnection(host: "", port: 5120, using: params) /// IP iPhone
+        self.connection = NWConnection(host: "192.168.1.5", port: 5120, using: params) /// IP iPhone
         self.connection?.start(queue: self.queue)
     }
+
     
     func startStreaming() async {
-        
         do {
             guard let display = try await SCShareableContent.current.displays.first else {
                 print("No Display Found")
@@ -42,13 +42,15 @@ class ScreenStreamer: NSObject, ObservableObject, SCStreamDelegate {
             let filter = SCContentFilter(display: display, excludingWindows: [])
             self.stream = SCStream(filter: filter, configuration: config, delegate: self)
             
+            /// 🔥 **Fix: Remove `await` since this is NOT async**
+            try stream?.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+            
             try await stream?.startCapture()
+            
         } catch {
             print("Failed to start screen capture: \(error)")
         }
-        
     }
-    
 }
 
 
@@ -70,20 +72,30 @@ extension ScreenStreamer: SCStreamOutput {
     }
 
     private func sendFrame(_ data: Data) {
+        print("🔵 Sending frame: \(data.count) bytes")
         connection?.send(content: data, completion: .contentProcessed { error in
             if let error = error {
-                print("Send error: \(error)")
+                print("🔴 Send error: \(error)")
+            } else {
+                print("✅ Frame sent successfully")
             }
         })
     }
 }
 
 extension NSImage {
-    func jpegData(compressionQuality: CGFloat = 0.8) -> Data? {
+    func jpegData(compressionQuality: CGFloat = 0.9) -> Data? {
         guard let tiffData = self.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiffData) else {
             return nil
         }
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
+        
+        let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
+        
+        if jpegData == nil {
+            print("❌ Failed to encode JPEG")
+        }
+        
+        return jpegData
     }
 }
