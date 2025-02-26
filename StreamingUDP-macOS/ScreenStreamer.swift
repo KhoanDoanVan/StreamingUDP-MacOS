@@ -22,37 +22,34 @@ class ScreenStreamer: NSObject, ObservableObject, SCStreamDelegate {
     
     func setupConnection() {
         let params = NWParameters.udp
-        self.connection = NWConnection(host: "192.168.1.5", port: 5120, using: params) /// IP iPhone
+        self.connection = NWConnection(host: "192.168.1.3", port: 5120, using: params) /// IP iPhone
         self.connection?.start(queue: self.queue)
     }
 
-    
     func startStreaming() async {
         do {
             guard let display = try await SCShareableContent.current.displays.first else {
-                print("No Display Found")
+                print("❌ No Display Found")
                 return
             }
             
             let config = SCStreamConfiguration()
-            config.width = 1280
-            config.height = 720
+            config.width = 640  // 🔥 Reduce resolution for stability
+            config.height = 360
             config.pixelFormat = kCVPixelFormatType_32BGRA
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 15)
             
             let filter = SCContentFilter(display: display, excludingWindows: [])
             self.stream = SCStream(filter: filter, configuration: config, delegate: self)
             
-            /// 🔥 **Fix: Remove `await` since this is NOT async**
             try stream?.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
-            
             try await stream?.startCapture()
             
         } catch {
-            print("Failed to start screen capture: \(error)")
+            print("❌ Failed to start screen capture: \(error)")
         }
     }
 }
-
 
 extension ScreenStreamer: SCStreamOutput {
     
@@ -73,9 +70,14 @@ extension ScreenStreamer: SCStreamOutput {
 
     private func sendFrame(_ data: Data) {
         print("🔵 Sending frame: \(data.count) bytes")
-        connection?.send(content: data, completion: .contentProcessed { error in
+        
+        var size = UInt32(data.count).bigEndian
+        let sizeData = Data(bytes: &size, count: MemoryLayout<UInt32>.size)
+        let fullData = sizeData + data  // 🔥 Prepend size to data
+        
+        connection?.send(content: fullData, completion: .contentProcessed { error in
             if let error = error {
-                print("🔴 Send error: \(error)")
+                print("❌ Send error: \(error)")
             } else {
                 print("✅ Frame sent successfully")
             }
@@ -84,18 +86,9 @@ extension ScreenStreamer: SCStreamOutput {
 }
 
 extension NSImage {
-    func jpegData(compressionQuality: CGFloat = 0.9) -> Data? {
+    func jpegData(compressionQuality: CGFloat) -> Data? {
         guard let tiffData = self.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData) else {
-            return nil
-        }
-        
-        let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
-        
-        if jpegData == nil {
-            print("❌ Failed to encode JPEG")
-        }
-        
-        return jpegData
+              let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
     }
 }
